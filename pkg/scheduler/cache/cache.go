@@ -689,11 +689,12 @@ func (sc *SchedulerCache) processCleanupJob() {
 }
 
 func (sc *SchedulerCache) updateClusterResource() {
-	sc.totalResource = schedulingapi.EmptyResource()
+	r := schedulingapi.EmptyResource()
 	// cluster resource
 	for _, n := range sc.Nodes {
-		sc.totalResource.Add(n.Allocatable)
+		r.Add(n.Allocatable)
 	}
+	sc.totalResource = r
 }
 
 func (sc *SchedulerCache) updateQueueStatus() {
@@ -718,7 +719,7 @@ func (sc *SchedulerCache) updateQueueStatus() {
 			newQueue.Status.Allocatable = newQueue.Spec.Capability
 		} else {
 			// weight
-			r := sc.totalResource.Multi(float64(newQueue.Spec.Weight) / float64(totalWeight))
+			r := sc.totalResource.SafeMulti(float64(newQueue.Spec.Weight) / float64(totalWeight))
 			newQueue.Status.Allocatable = r.Convert2ResourceList()
 		}
 		if r, found := queueAllocated[queueId]; found {
@@ -731,7 +732,6 @@ func (sc *SchedulerCache) updateQueueStatus() {
 			newQueue.Name, newQueue.Status.Allocatable, newQueue.Status.Allocated)
 	}
 }
-
 
 func (sc *SchedulerCache) resyncTask(task *schedulingapi.TaskInfo) {
 	sc.errTasks.AddRateLimited(task)

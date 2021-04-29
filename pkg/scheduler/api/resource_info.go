@@ -245,6 +245,16 @@ func (r *Resource) Multi(ratio float64) *Resource {
 	return r
 }
 
+func (r *Resource) SafeMulti(ratio float64) *Resource {
+	rl := r.Clone()
+	rl.MilliCPU *= ratio
+	rl.Memory *= ratio
+	for rName, rQuant := range r.ScalarResources {
+		rl.ScalarResources[rName] = rQuant * ratio
+	}
+	return rl
+}
+
 // Less checks whether a resource is less than other
 func (r *Resource) Less(rr *Resource) bool {
 	lessFunc := func(l, r float64) bool {
