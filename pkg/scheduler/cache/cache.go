@@ -727,7 +727,7 @@ func (sc *SchedulerCache) updateQueueStatus() {
 		if _, err := sc.vcClient.SchedulingV1beta1().Queues().UpdateStatus(context.TODO(), newQueue, metav1.UpdateOptions{}); err != nil {
 			klog.Errorf("Failed to update status of Queue %s: %v.", newQueue.Name, err)
 		}
-		klog.V(3).Infof("update status of Queue %s: Allocatable: [%+v.] Allocated: [%+v]",
+		klog.V(5).Infof("update status of Queue %s: Allocatable: [%+v.] Allocated: [%+v]",
 			newQueue.Name, newQueue.Status.Allocatable, newQueue.Status.Allocated)
 	}
 }
