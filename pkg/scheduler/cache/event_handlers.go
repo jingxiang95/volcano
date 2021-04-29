@@ -488,7 +488,7 @@ func (sc *SchedulerCache) AddQueueV1beta1(obj interface{}) {
 		return
 	}
 
-	queue := &scheduling.Queue{}
+	queue := &schedulingv1.Queue{}
 	if err := scheme.Scheme.Convert(ss, queue, nil); err != nil {
 		klog.Errorf("Failed to convert queue from %T to %T", ss, queue)
 		return
@@ -518,7 +518,7 @@ func (sc *SchedulerCache) UpdateQueueV1beta1(oldObj, newObj interface{}) {
 		return
 	}
 
-	newQueue := &scheduling.Queue{}
+	newQueue := &schedulingv1.Queue{}
 	if err := scheme.Scheme.Convert(newSS, newQueue, nil); err != nil {
 		klog.Errorf("Failed to convert queue from %T to %T", newSS, newQueue)
 		return
@@ -552,12 +552,12 @@ func (sc *SchedulerCache) DeleteQueueV1beta1(obj interface{}) {
 	sc.deleteQueue(schedulingapi.QueueID(ss.Name))
 }
 
-func (sc *SchedulerCache) addQueue(queue *scheduling.Queue) {
+func (sc *SchedulerCache) addQueue(queue *schedulingv1.Queue) {
 	qi := schedulingapi.NewQueueInfo(queue)
 	sc.Queues[qi.UID] = qi
 }
 
-func (sc *SchedulerCache) updateQueue(queue *scheduling.Queue) {
+func (sc *SchedulerCache) updateQueue(queue *schedulingv1.Queue) {
 	sc.addQueue(queue)
 }
 

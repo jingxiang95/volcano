@@ -18,6 +18,7 @@ package api
 
 import (
 	"fmt"
+	"k8s.io/apimachinery/pkg/api/resource"
 	"math"
 
 	v1 "k8s.io/api/core/v1"
@@ -90,6 +91,18 @@ func NewResource(rl v1.ResourceList) *Resource {
 		}
 	}
 	return r
+}
+
+// NewResource create a new resource object from resource list
+func (r *Resource) Convert2ResourceList() v1.ResourceList {
+	rl := v1.ResourceList{
+		v1.ResourceCPU:    *resource.NewMilliQuantity(int64(r.MilliCPU), resource.BinarySI),
+		v1.ResourceMemory: *resource.NewMilliQuantity(int64(r.Memory), resource.BinarySI),
+	}
+	for name, f := range r.ScalarResources {
+		rl[name] = *resource.NewMilliQuantity(int64(f), resource.BinarySI)
+	}
+	return rl
 }
 
 // IsEmpty returns bool after checking any of resource is less than min possible value

@@ -109,6 +109,8 @@ type SchedulerCache struct {
 
 	errTasks    workqueue.RateLimitingInterface
 	deletedJobs workqueue.RateLimitingInterface
+
+	totalResource *schedulingapi.Resource
 }
 
 type defaultBinder struct {
@@ -445,6 +447,12 @@ func (sc *SchedulerCache) Run(stopCh <-chan struct{}) {
 
 	// Cleanup jobs.
 	go wait.Until(sc.processCleanupJob, 0, stopCh)
+
+	// update node allocatable resource
+	go wait.Until(sc.updateClusterResource, 5*time.Second, stopCh)
+	// update queue status allocatable resource
+	go wait.Until(sc.updateQueueStatus, 3*time.Second, stopCh)
+
 }
 
 // WaitForCacheSync sync the cache with the api server
@@ -679,6 +687,51 @@ func (sc *SchedulerCache) processCleanupJob() {
 		sc.deleteJob(job)
 	}
 }
+
+func (sc *SchedulerCache) updateClusterResource() {
+	sc.totalResource = schedulingapi.EmptyResource()
+	// cluster resource
+	for _, n := range sc.Nodes {
+		sc.totalResource.Add(n.Allocatable)
+	}
+}
+
+func (sc *SchedulerCache) updateQueueStatus() {
+	queueAllocated := map[schedulingapi.QueueID]*schedulingapi.Resource{}
+	for _, info := range sc.Jobs {
+		if resource, found := queueAllocated[info.Queue]; found {
+			resource.Add(info.Allocated)
+		} else {
+			r := schedulingapi.EmptyResource()
+			r.Add(info.Allocated)
+			queueAllocated[info.Queue] = r
+		}
+	}
+	totalWeight := int32(0)
+	for _, info := range sc.Queues {
+		totalWeight += info.Weight
+	}
+	for queueId, info := range sc.Queues {
+		newQueue := info.Queue.DeepCopy()
+		if newQueue.Spec.Capability != nil && len(newQueue.Spec.Capability) > 0 {
+			// Capability
+			newQueue.Status.Allocatable = newQueue.Spec.Capability
+		} else {
+			// weight
+			r := sc.totalResource.Multi(float64(newQueue.Spec.Weight) / float64(totalWeight))
+			newQueue.Status.Allocatable = r.Convert2ResourceList()
+		}
+		if r, found := queueAllocated[queueId]; found {
+			newQueue.Status.Allocated = r.Convert2ResourceList()
+		}
+		if _, err := sc.vcClient.SchedulingV1beta1().Queues().UpdateStatus(context.TODO(), newQueue, metav1.UpdateOptions{}); err != nil {
+			klog.Errorf("Failed to update status of Queue %s: %v.", newQueue.Name, err)
+		}
+		klog.V(3).Infof("update status of Queue %s: Allocatable: [%+v.] Allocated: [%+v]",
+			newQueue.Name, newQueue.Status.Allocatable, newQueue.Status.Allocated)
+	}
+}
+
 
 func (sc *SchedulerCache) resyncTask(task *schedulingapi.TaskInfo) {
 	sc.errTasks.AddRateLimited(task)

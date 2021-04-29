@@ -19,8 +19,7 @@ package api
 import (
 	"k8s.io/apimachinery/pkg/types"
 
-	"volcano.sh/apis/pkg/apis/scheduling"
-	"volcano.sh/apis/pkg/apis/scheduling/v1beta1"
+	scheduling "volcano.sh/apis/pkg/apis/scheduling/v1beta1"
 )
 
 // QueueID is UID type, serves as unique ID for each queue
@@ -51,8 +50,8 @@ func NewQueueInfo(queue *scheduling.Queue) *QueueInfo {
 		Name: queue.Name,
 
 		Weight:    queue.Spec.Weight,
-		Hierarchy: queue.Annotations[v1beta1.KubeHierarchyAnnotationKey],
-		Weights:   queue.Annotations[v1beta1.KubeHierarchyWeightAnnotationKey],
+		Hierarchy: queue.Annotations[scheduling.KubeHierarchyAnnotationKey],
+		Weights:   queue.Annotations[scheduling.KubeHierarchyWeightAnnotationKey],
 
 		Queue: queue,
 	}
