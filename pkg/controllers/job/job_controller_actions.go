@@ -547,7 +547,7 @@ func (cc *jobcontroller) createOrUpdatePodGroup(job *batch.Job) error {
 			if task.MinAvailable != nil {
 				minTaskMember[task.Name] = *task.MinAvailable
 			} else {
-				minTaskMember[task.Name] = task.Replicas
+				minTaskMember[task.Name] = 0
 			}
 		}
 
