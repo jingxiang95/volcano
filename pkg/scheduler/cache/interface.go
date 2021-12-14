@@ -35,13 +35,13 @@ type Cache interface {
 	Snapshot() *api.ClusterInfo
 
 	// WaitForCacheSync waits for all cache synced
-	WaitForCacheSync(stopCh <-chan struct{})
+	WaitForCacheSync(stopCh <-chan struct{}) bool
 
-	// AddBindTask binds Task to the target host.
+	// Bind binds Task to the target host.
 	// TODO(jinzhej): clean up expire Tasks.
-	AddBindTask(task *api.TaskInfo) error
+	Bind(task *api.TaskInfo, hostname string) error
 
-	// BindPodGroup Pod/PodGroup to cluster
+	// Bind Pod/PodGroup to cluster
 	BindPodGroup(job *api.JobInfo, cluster string) error
 
 	// Evict evicts the task to release resources.
@@ -80,7 +80,7 @@ type VolumeBinder interface {
 
 //Binder interface for binding task and hostname
 type Binder interface {
-	Bind(kubeClient *kubernetes.Clientset, tasks []*api.TaskInfo) (error, []*api.TaskInfo)
+	Bind(task *v1.Pod, hostname string) error
 }
 
 // Evictor interface for evict pods

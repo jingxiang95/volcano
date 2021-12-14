@@ -7249,25 +7249,6 @@ spec:
           status:
             description: Current status of the volcano Job
             properties:
-              conditions:
-                description: Which conditions caused the current job state.
-                items:
-                  description: JobCondition contains details for the current condition
-                    of this job.
-                  properties:
-                    lastTransitionTime:
-                      description: Last time the condition transitioned from one phase
-                        to another.
-                      format: date-time
-                      type: string
-                    status:
-                      description: Status is the new phase of job after performing
-                        the state's action.
-                      type: string
-                  required:
-                  - status
-                  type: object
-                type: array
               controlledResources:
                 additionalProperties:
                   type: string
@@ -7537,7 +7518,6 @@ spec:
             image: volcanosh/vc-controller-manager:latest
             args:
               - --logtostderr
-              - --enable-healthz=true
               - -v=4
               - 2>&1
             imagePullPolicy: "IfNotPresent"
@@ -7607,12 +7587,12 @@ rules:
   - apiGroups: [""]
     resources: ["resourcequotas"]
     verbs: ["list", "watch"]
+  - apiGroups: ["storage.k8s.io"]
+    resources: ["storageclasses"]
+    verbs: ["list", "watch"]
   - apiGroups: [""]
     resources: ["nodes"]
     verbs: ["list", "watch"]
-  - apiGroups: [ "storage.k8s.io" ]
-    resources: ["storageclasses", "csinodes", "csidrivers", "csistoragecapacities"]
-    verbs: [ "list", "watch" ]
   - apiGroups: ["policy"]
     resources: ["poddisruptionbudgets"]
     verbs: ["list", "watch"]
@@ -7690,8 +7670,6 @@ spec:
           args:
             - --logtostderr
             - --scheduler-conf=/volcano.scheduler/volcano-scheduler.conf
-            - --enable-healthz=true
-            - --enable-metrics=true
             - -v=3
             - 2>&1
           imagePullPolicy: "IfNotPresent"

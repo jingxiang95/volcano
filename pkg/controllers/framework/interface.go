@@ -28,7 +28,7 @@ type ControllerOption struct {
 	KubeClient            kubernetes.Interface
 	VolcanoClient         vcclientset.Interface
 	SharedInformerFactory informers.SharedInformerFactory
-	SchedulerNames        []string
+	SchedulerName         string
 	WorkerNum             uint32
 	MaxRequeueNum         int
 }

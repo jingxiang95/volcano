@@ -69,19 +69,13 @@ func (cc *jobcontroller) killJob(jobInfo *apis.JobInfo, podRetainPhase state.Pha
 
 			maxRetry := job.Spec.MaxRetry
 			lastRetry := false
-			if job.Status.RetryCount >= maxRetry-1 {
+			if job.Status.RetryCount > maxRetry-1 {
 				lastRetry = true
 			}
 
-			// Only retain the Failed and Succeeded pods at the last retry.
-			// If it is not the last retry, kill pod as defined in `podRetainPhase`.
-			retainPhase := podRetainPhase
-			if lastRetry {
-				retainPhase = state.PodRetainPhaseSoft
-			}
-			_, retain := retainPhase[pod.Status.Phase]
+			_, retain := podRetainPhase[pod.Status.Phase]
 
-			if !retain {
+			if !retain && !lastRetry {
 				err := cc.deleteJobPod(job.Name, pod)
 				if err == nil {
 					terminating++
@@ -122,8 +116,6 @@ func (cc *jobcontroller) killJob(jobInfo *apis.JobInfo, podRetainPhase state.Pha
 	if updateStatus != nil {
 		if updateStatus(&job.Status) {
 			job.Status.State.LastTransitionTime = metav1.Now()
-			jobCondition := newCondition(job.Status.State.Phase, &job.Status.State.LastTransitionTime)
-			job.Status.Conditions = append(job.Status.Conditions, jobCondition)
 		}
 	}
 
@@ -287,13 +279,10 @@ func (cc *jobcontroller) syncJob(jobInfo *apis.JobInfo, updateStatus state.Updat
 		}
 	}
 
-	var jobCondition batch.JobCondition
 	if !syncTask {
 		if updateStatus != nil {
 			if updateStatus(&job.Status) {
 				job.Status.State.LastTransitionTime = metav1.Now()
-				jobCondition = newCondition(job.Status.State.Phase, &job.Status.State.LastTransitionTime)
-				job.Status.Conditions = append(job.Status.Conditions, jobCondition)
 			}
 		}
 		newJob, err := cc.vcClient.BatchV1alpha1().Jobs(job.Namespace).UpdateStatus(context.TODO(), job, metav1.UpdateOptions{})
@@ -432,15 +421,12 @@ func (cc *jobcontroller) syncJob(jobInfo *apis.JobInfo, updateStatus state.Updat
 		MinAvailable:        job.Spec.MinAvailable,
 		TaskStatusCount:     taskStatusCount,
 		ControlledResources: job.Status.ControlledResources,
-		Conditions:          job.Status.Conditions,
 		RetryCount:          job.Status.RetryCount,
 	}
 
 	if updateStatus != nil {
 		if updateStatus(&job.Status) {
 			job.Status.State.LastTransitionTime = metav1.Now()
-			jobCondition = newCondition(job.Status.State.Phase, &job.Status.State.LastTransitionTime)
-			job.Status.Conditions = append(job.Status.Conditions, jobCondition)
 		}
 	}
 	newJob, err := cc.vcClient.BatchV1alpha1().Jobs(job.Namespace).UpdateStatus(context.TODO(), job, metav1.UpdateOptions{})
@@ -695,11 +681,10 @@ func (cc *jobcontroller) initJobStatus(job *batch.Job) (*batch.Job, error) {
 		return job, nil
 	}
 
+	job.Status.State.LastTransitionTime = metav1.Now()
 	job.Status.State.Phase = batch.Pending
 	job.Status.State.LastTransitionTime = metav1.Now()
 	job.Status.MinAvailable = job.Spec.MinAvailable
-	jobCondition := newCondition(job.Status.State.Phase, &job.Status.State.LastTransitionTime)
-	job.Status.Conditions = append(job.Status.Conditions, jobCondition)
 	newJob, err := cc.vcClient.BatchV1alpha1().Jobs(job.Namespace).UpdateStatus(context.TODO(), job, metav1.UpdateOptions{})
 	if err != nil {
 		klog.Errorf("Failed to update status of Job %v/%v: %v",
@@ -764,11 +749,4 @@ func isInitiated(job *batch.Job) bool {
 	}
 
 	return true
-}
-
-func newCondition(status batch.JobPhase, lastTransitionTime *metav1.Time) batch.JobCondition {
-	return batch.JobCondition{
-		Status:             status,
-		LastTransitionTime: lastTransitionTime,
-	}
 }

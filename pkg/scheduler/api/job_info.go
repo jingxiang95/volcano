@@ -100,7 +100,6 @@ type TaskInfo struct {
 	Priority    int32
 	VolumeReady bool
 	Preemptable bool
-	BestEffort  bool
 
 	// RevocableZone support set volcano.sh/revocable-zone annotaion or label for pod/podgroup
 	// we only support empty value or * value for this version and we will support specify revocable zone name for futrue release
@@ -131,13 +130,10 @@ func getTaskID(pod *v1.Pod) TaskID {
 	return ""
 }
 
-const TaskPriorityAnnotation = "volcano.sh/task-priority"
-
 // NewTaskInfo creates new taskInfo object for a Pod
 func NewTaskInfo(pod *v1.Pod) *TaskInfo {
 	initResReq := GetPodResourceRequest(pod)
 	resReq := initResReq
-	bestEffort := initResReq.IsEmpty()
 	preemptable := GetPodPreemptable(pod)
 	revocableZone := GetPodRevocableZone(pod)
 	topologyPolicy := GetPodTopologyPolicy(pod)
@@ -154,7 +150,6 @@ func NewTaskInfo(pod *v1.Pod) *TaskInfo {
 		Resreq:         resReq,
 		InitResreq:     initResReq,
 		Preemptable:    preemptable,
-		BestEffort:     bestEffort,
 		RevocableZone:  revocableZone,
 		TopologyPolicy: topologyPolicy,
 
@@ -166,12 +161,6 @@ func NewTaskInfo(pod *v1.Pod) *TaskInfo {
 
 	if pod.Spec.Priority != nil {
 		ti.Priority = *pod.Spec.Priority
-	}
-
-	if taskPriority, ok := pod.Annotations[TaskPriorityAnnotation]; ok {
-		if priority, err := strconv.ParseInt(taskPriority, 10, 32); err == nil {
-			ti.Priority = int32(priority)
-		}
 	}
 
 	return ti
@@ -201,13 +190,11 @@ func (ti *TaskInfo) Clone() *TaskInfo {
 		Name:           ti.Name,
 		Namespace:      ti.Namespace,
 		Priority:       ti.Priority,
-		PodVolumes:     ti.PodVolumes,
 		Pod:            ti.Pod,
 		Resreq:         ti.Resreq.Clone(),
 		InitResreq:     ti.InitResreq.Clone(),
 		VolumeReady:    ti.VolumeReady,
 		Preemptable:    ti.Preemptable,
-		BestEffort:     ti.BestEffort,
 		RevocableZone:  ti.RevocableZone,
 		TopologyPolicy: ti.TopologyPolicy,
 
@@ -498,20 +485,18 @@ func (ji *JobInfo) Clone() *JobInfo {
 
 		MinAvailable:   ji.MinAvailable,
 		WaitingTime:    ji.WaitingTime,
-		JobFitErrors:   ji.JobFitErrors,
 		NodesFitErrors: make(map[TaskID]*FitErrors),
 		Allocated:      EmptyResource(),
 		TotalRequest:   EmptyResource(),
 
-		PodGroup: ji.PodGroup.Clone(),
+		PodGroup: ji.PodGroup,
 
-		TaskStatusIndex:       map[TaskStatus]tasksMap{},
-		TaskMinAvailable:      ji.TaskMinAvailable,
-		TaskMinAvailableTotal: ji.TaskMinAvailableTotal,
-		Tasks:                 tasksMap{},
-		Preemptable:           ji.Preemptable,
-		RevocableZone:         ji.RevocableZone,
-		Budget:                ji.Budget.Clone(),
+		TaskStatusIndex:  map[TaskStatus]tasksMap{},
+		TaskMinAvailable: ji.TaskMinAvailable,
+		Tasks:            tasksMap{},
+		Preemptable:      ji.Preemptable,
+		RevocableZone:    ji.RevocableZone,
+		Budget:           ji.Budget.Clone(),
 	}
 
 	ji.CreationTimestamp.DeepCopyInto(&info.CreationTimestamp)
@@ -606,27 +591,36 @@ func (ji *JobInfo) TaskSchedulingReason(tid TaskID) (reason string, msg string) 
 
 // ReadyTaskNum returns the number of tasks that are ready or that is best-effort.
 func (ji *JobInfo) ReadyTaskNum() int32 {
-	occupied := 0
-	occupied += len(ji.TaskStatusIndex[Bound])
-	occupied += len(ji.TaskStatusIndex[Binding])
-	occupied += len(ji.TaskStatusIndex[Running])
-	occupied += len(ji.TaskStatusIndex[Allocated])
-	occupied += len(ji.TaskStatusIndex[Succeeded])
+	var occupied int32
+	for status, tasks := range ji.TaskStatusIndex {
+		if AllocatedStatus(status) ||
+			status == Succeeded {
+			occupied += int32(len(tasks))
+			continue
+		}
 
-	if tasks, found := ji.TaskStatusIndex[Pending]; found {
-		for _, task := range tasks {
-			if task.BestEffort {
-				occupied++
+		if status == Pending {
+			for _, task := range tasks {
+				if task.InitResreq.IsEmpty() {
+					occupied++
+				}
 			}
 		}
 	}
 
-	return int32(occupied)
+	return occupied
 }
 
 // WaitingTaskNum returns the number of tasks that are pipelined.
 func (ji *JobInfo) WaitingTaskNum() int32 {
-	return int32(len(ji.TaskStatusIndex[Pipelined]))
+	occupid := 0
+	for status, tasks := range ji.TaskStatusIndex {
+		if status == Pipelined {
+			occupid += len(tasks)
+		}
+	}
+
+	return int32(occupid)
 }
 
 // CheckTaskMinAvailable returns whether each task of job is valid.
@@ -655,71 +649,6 @@ func (ji *JobInfo) CheckTaskMinAvailable() bool {
 		}
 	}
 
-	return true
-}
-
-// CheckTaskMinAvailableReady return ready pods meet task minavaliable.
-func (ji *JobInfo) CheckTaskMinAvailableReady() bool {
-	if ji.MinAvailable < ji.TaskMinAvailableTotal {
-		return true
-	}
-	occupiedMap := map[TaskID]int32{}
-	for status, tasks := range ji.TaskStatusIndex {
-		if AllocatedStatus(status) ||
-			status == Succeeded {
-			for _, task := range tasks {
-				occupiedMap[getTaskID(task.Pod)] += 1
-			}
-			continue
-		}
-
-		if status == Pending {
-			for _, task := range tasks {
-				if task.InitResreq.IsEmpty() {
-					occupiedMap[getTaskID(task.Pod)] += 1
-				}
-			}
-		}
-	}
-	for taskId, minNum := range ji.TaskMinAvailable {
-		if occupiedMap[taskId] < minNum {
-			klog.V(4).Infof("Job %s/%s Task %s occupied %v less than task min avaliable", ji.Namespace, ji.Name, taskId, occupiedMap[taskId])
-			return false
-		}
-	}
-	return true
-}
-
-// CheckTaskMinAvailableReady return ready pods meet task minavaliable.
-func (ji *JobInfo) CheckTaskMinAvailablePipelined() bool {
-	if ji.MinAvailable < ji.TaskMinAvailableTotal {
-		return true
-	}
-	occupiedMap := map[TaskID]int32{}
-	for status, tasks := range ji.TaskStatusIndex {
-		if AllocatedStatus(status) ||
-			status == Succeeded ||
-			status == Pipelined {
-			for _, task := range tasks {
-				occupiedMap[getTaskID(task.Pod)] += 1
-			}
-			continue
-		}
-
-		if status == Pending {
-			for _, task := range tasks {
-				if task.InitResreq.IsEmpty() {
-					occupiedMap[getTaskID(task.Pod)] += 1
-				}
-			}
-		}
-	}
-	for taskId, minNum := range ji.TaskMinAvailable {
-		if occupiedMap[taskId] < minNum {
-			klog.V(4).Infof("Job %s/%s Task %s occupied %v less than task min avaliable", ji.Namespace, ji.Name, taskId, occupiedMap[taskId])
-			return false
-		}
-	}
 	return true
 }
 

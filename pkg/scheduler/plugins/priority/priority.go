@@ -18,6 +18,7 @@ package priority
 
 import (
 	"k8s.io/klog"
+
 	"volcano.sh/volcano/pkg/scheduler/api"
 	"volcano.sh/volcano/pkg/scheduler/framework"
 	"volcano.sh/volcano/pkg/scheduler/plugins/util"
@@ -110,14 +111,8 @@ func (pp *priorityPlugin) OnSessionOpen(ssn *framework.Session) {
 		klog.V(4).Infof("Victims from Priority plugins are %+v", victims)
 		return victims, util.Permit
 	}
+
 	ssn.AddPreemptableFn(pp.Name(), preemptableFn)
-
-	jobStarvingFn := func(obj interface{}) bool {
-		ji := obj.(*api.JobInfo)
-		return ji.ReadyTaskNum()+ji.WaitingTaskNum() < int32(len(ji.Tasks))
-	}
-	ssn.AddJobStarvingFns(pp.Name(), jobStarvingFn)
-
 }
 
 func (pp *priorityPlugin) OnSessionClose(ssn *framework.Session) {}

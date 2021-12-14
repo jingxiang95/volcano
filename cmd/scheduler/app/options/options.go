@@ -30,7 +30,6 @@ const (
 	defaultSchedulerPeriod = time.Second
 	defaultQueue           = "default"
 	defaultListenAddress   = ":8080"
-	defaultHealthzAddress  = ":11251"
 	defaultPluginsDir      = ""
 
 	defaultQPS   = 2000.0
@@ -52,16 +51,14 @@ type ServerOption struct {
 	LockObjectNamespace  string
 	DefaultQueue         string
 	PrintVersion         bool
-	EnableMetrics        bool
 	ListenAddress        string
 	EnablePriorityClass  bool
-	EnableCSIStorage     bool
 	// vc-scheduler will load (not activate) custom plugins which are in this directory
-	PluginsDir    string
-	EnableHealthz bool
+	PluginsDir string
 	// HealthzBindAddress is the IP address and port for the health check server to serve on
 	// defaulting to :11251
 	HealthzBindAddress string
+
 	// Parameters for scheduling tuning: the number of feasible nodes to find and score
 	MinNodesToFind             int32
 	MinPercentageOfNodesToFind int32
@@ -73,7 +70,10 @@ var ServerOpts *ServerOption
 
 // NewServerOption creates a new CMServer with a default config.
 func NewServerOption() *ServerOption {
-	return &ServerOption{}
+	s := ServerOption{
+		HealthzBindAddress: ":11251",
+	}
+	return &s
 }
 
 // AddFlags adds flags for a specific CMServer to the specified FlagSet.
@@ -91,7 +91,6 @@ func (s *ServerOption) AddFlags(fs *pflag.FlagSet) {
 	fs.BoolVar(&s.PrintVersion, "version", false, "Show version and quit")
 	fs.StringVar(&s.LockObjectNamespace, "lock-object-namespace", s.LockObjectNamespace, "Define the namespace of the lock object that is used for leader election")
 	fs.StringVar(&s.ListenAddress, "listen-address", defaultListenAddress, "The address to listen on for HTTP requests.")
-	fs.StringVar(&s.HealthzBindAddress, "healthz-address", defaultHealthzAddress, "The address to listen on for the health check server.")
 	fs.BoolVar(&s.EnablePriorityClass, "priority-class", true,
 		"Enable PriorityClass to provide the capacity of preemption at pod group level; to disable it, set it false")
 	fs.Float32Var(&s.KubeClientOptions.QPS, "kube-api-qps", defaultQPS, "QPS to use while talking with kubernetes apiserver")
@@ -107,10 +106,6 @@ func (s *ServerOption) AddFlags(fs *pflag.FlagSet) {
 	fs.Int32Var(&s.PercentageOfNodesToFind, "percentage-nodes-to-find", defaultPercentageOfNodesToFind, "The percentage of nodes to find and score, if <=0 will be calcuated based on the cluster size")
 
 	fs.StringVar(&s.PluginsDir, "plugins-dir", defaultPluginsDir, "vc-scheduler will load custom plugins which are in this directory")
-	fs.BoolVar(&s.EnableCSIStorage, "csi-storage", false,
-		"Enable tracking of available storage capacity that CSI drivers provide; it is false by default")
-	fs.BoolVar(&s.EnableHealthz, "enable-healthz", false, "Enable the health check; it is false by default")
-	fs.BoolVar(&s.EnableMetrics, "enable-metrics", false, "Enable the metrics function; it is false by default")
 }
 
 // CheckOptionOrDie check lock-object-namespace when LeaderElection is enabled.

@@ -187,7 +187,7 @@ func (sp *sshPlugin) mountRsaKey(pod *v1.Pod, job *batch.Job) {
 }
 
 func generateRsaKey(job *batch.Job) (map[string][]byte, error) {
-	bitSize := 2048
+	bitSize := 1024
 
 	privateKey, err := rsa.GenerateKey(rand.Reader, bitSize)
 	if err != nil {

@@ -19,8 +19,7 @@ package allocate
 import (
 	"reflect"
 	"testing"
-
-	"github.com/agiledragon/gomonkey/v2"
+	"time"
 
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -38,13 +37,6 @@ import (
 )
 
 func TestAllocate(t *testing.T) {
-	var tmp *cache.SchedulerCache
-	patches := gomonkey.ApplyMethod(reflect.TypeOf(tmp), "AddBindTask", func(scCache *cache.SchedulerCache, task *api.TaskInfo) error {
-		scCache.Binder.Bind(nil, []*api.TaskInfo{task})
-		return nil
-	})
-	defer patches.Reset()
-
 	framework.RegisterPluginBuilder("drf", drf.New)
 	framework.RegisterPluginBuilder("proportion", proportion.New)
 
@@ -247,7 +239,6 @@ func TestAllocate(t *testing.T) {
 
 				Recorder: record.NewFakeRecorder(100),
 			}
-
 			for _, node := range test.nodes {
 				schedulerCache.AddNode(node)
 			}
@@ -284,6 +275,14 @@ func TestAllocate(t *testing.T) {
 			defer framework.CloseSession(ssn)
 
 			allocate.Execute(ssn)
+
+			for i := 0; i < len(test.expected); i++ {
+				select {
+				case <-binder.Channel:
+				case <-time.After(3 * time.Second):
+					t.Errorf("Failed to get binding request.")
+				}
+			}
 
 			if !reflect.DeepEqual(test.expected, binder.Binds) {
 				t.Errorf("expected: %v, got %v ", test.expected, binder.Binds)
